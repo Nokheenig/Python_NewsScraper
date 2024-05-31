@@ -1,5 +1,6 @@
 from selenium import webdriver #Webdriver de Selenium qui permet de contrôler un navigateur
 from selenium.webdriver.common.by import By #Permet d'accéder aux différents élements de la page web
+#from selenium.webdriver.remote.webelement
 
 from webdriver_manager.chrome import ChromeDriverManager #Assure la gestion du webdriver de Chrome
 
@@ -18,7 +19,7 @@ from definitions import ROOT_DIR
 #logScraper.basicConfig(filename='logs/scraper.log', encoding='utf-8', filemode='w', format='%(asctime)s-%(levelname)s:%(message)s', level=logScraper.DEBUG)
 
 import logging as logDal
-logDal.basicConfig(filename='logs/scraper.log', encoding='utf-8', filemode='w', format='%(asctime)s-%(levelname)s:%(message)s', level=logDal.DEBUG)
+logDal.basicConfig(filename=os.path.join(ROOT_DIR,"logs","scraper.log"), encoding='utf-8', filemode='w', format='%(asctime)s-%(levelname)s:%(message)s', level=logDal.DEBUG)
 
 class NewsScraper:
     def __init__(self) -> None:
@@ -44,6 +45,8 @@ class NewsScraper:
         os.mkdir(sessionFilesPath)
         sessionFailuresPath = os.path.join(ROOT_DIR,sessionFilesPath,"failures")
         os.mkdir(sessionFailuresPath)
+        sessionArticlesPath = os.path.join(ROOT_DIR,sessionFilesPath,"articles")
+        os.mkdir(sessionArticlesPath)
 
         self.driver.get('https://www.euronews.com/{}/{}/{}'.format(year, month, day)) #Accès aux articles du jour d'esigne'
 
@@ -71,23 +74,41 @@ class NewsScraper:
         errors = []
         list_of_articles = []
         for idx_article, article in enumerate(articles):
-            #if idx_article >0: continue
+            if idx_article >4: continue
             try : #On utilise un try except pour pouvoir sauter les pages qui n'ont pas la même structure html pour évoter qui causerait une erreur    
                 self.driver.get(article) #On accède à la page de l'article
                 logDal.info(f"New scraped article: {article}")
-                #Récupération du titre du deuxième élément ayant la classe "c-article-date"
+                # Récupération du body de la page:
+                body = self.driver.find_element(By.XPATH, "/html/body")
+
+                """
+                Sauvegarde des sources de la page scrappée sur le disque
+                """
+                with open(os.path.join(sessionArticlesPath,f"{idx_article}_article_source.html"), "w", encoding='utf-8') as f:
+                        f.write(self.driver.page_source)
+
+                with open(os.path.join(sessionArticlesPath,f"{idx_article}_article_source_body.html"), "w", encoding='utf-8') as f:
+                        f.write(str(body.get_attribute("innerHTML")).strip())
+
+                """
+                Get article title
+                """
                 #print("c-article-redesign-title")
-                title =  self.driver.find_elements(By.CLASS_NAME, "c-article-redesign-title")[0].text #title =  self.driver.find_elements(By.CLASS_NAME, "c-article-redesign-title")[1].text
-                title = title if title else self.driver.find_elements(By.CLASS_NAME, "c-article-redesign-title")[1].text
-                
+                title =  body.find_elements(By.CLASS_NAME, "c-article-redesign-title")[0].text
+                title = title if title else body.find_elements(By.CLASS_NAME, "c-article-redesign-title")[1].text
+                """
+                ^v1
+                """
+
+                """
+                Get article authors
                 #Récupération des auteurs
                 #print("c-article-contributors")
-                authors_scrapped =  self.driver.find_elements(By.CLASS_NAME, "c-article-contributors")[1] #Etape 1) Accès au deuxième élément qui a la classe "c-article-contributors"
-                #print("b")
-                authors_scrapped = authors_scrapped.find_elements(By.TAG_NAME, "b") #Etape 2) accès au texte des sous-balises b contenant les auteurs
-                #authors_scrapped = self.driver.find_elements(By.XPATH, "//*[starts-with(@class,'c-article-contributors')]//*")
-                #authors_scrapped = authors_scrapped.find_elements(By.XPATH, "//*")
+                """
 
+                authors_scrapped =  body.find_elements(By.CLASS_NAME, "c-article-contributors")[1] #Etape 1) Accès au deuxième élément qui a la classe "c-article-contributors"
+                authors_scrapped = authors_scrapped.find_elements(By.TAG_NAME, "b") #Etape 2) accès au texte des sous-balises b contenant les auteurs
+                
                 authors = []
                 for subElement in authors_scrapped:
                     tagName = subElement.tag_name
@@ -100,16 +121,57 @@ class NewsScraper:
                         pass
 
                 authors = ", ".join(authors) #Etape 3) Concaténation des auteurs en une string
-        
+                """
+                ^v1
+                """
+
+                """
+                logDal.info(f"Before shit goes south:")
+                #authors_scrapped = self.driver.find_elements(By.XPATH, f"//*[starts-with(@class,'c-article-contributors')][1]//p")
+                #authors_scrapped += self.driver.find_elements(By.XPATH, f"//*[starts-with(@class,'c-article-contributors')][1]//a")
+                #authors_scrapped += self.driver.find_elements(By.XPATH, f"//*[starts-with(@class,'c-article-contributors')][1]//b")
+                #authors_scrapped = authors_scrapped.find_elements(By.XPATH, "//*")
+                authors_scrapped = self.driver.find_elements(By.XPATH, f"//*[starts-with(@class,'c-article-contributors')]")[0]
+                #for idx, aut in enumerate(authors_scrapped):
+                #    logDal.debug(f"authors_scrapped{idx}:\n{aut.get_attribute('innerHTML')}")
+                #logDal.debug(f"authors_scrapped:\n{authors_scrapped.get_attribute('innerHTML')}")
+                authors = []
+                tagList = ["p","a","b"]
+                for tag in tagList:
+                    authors_s = authors_scrapped.find_elements(By.TAG_NAME, f"{tag}")
+                    for subElement in authors_s:
+                        tagName = subElement.tag_name
+                        if tagName is None: continue
+                        subElementText = str(paragraph.get_attribute('innerText')).strip()
+                        if subElementText == "ADVERTISEMENT" or not subElementText: continue
+                        if tagName in ["p","a","b"]:
+                            authors.append(subElementText)
+                        else:
+                            pass
+                logDal.debug(f"authors({len(authors)}):{authors}")
+                authors = ", ".join(authors) #Etape 3) Concaténation des auteurs en une string
+
+                ^v2
+                """
+                
+                """
+                Get article publication date
+                """
                 #Récupération de la date de publication grâce à la valeur de l'attribut datetime 
                 #du deuxième élément ayant la classe "c-article-date"
                 #print("c-article-publication-date")
-                date = self.driver.find_elements(By.CLASS_NAME, "c-article-publication-date")[1].get_attribute('datetime') 
+                date = body.find_elements(By.CLASS_NAME, "c-article-publication-date")[1].get_attribute('datetime')
+                """
+                ^v1
+                """
                 
+                """
+                Get article Tags
+                """
                 #Récupération de la catégoie grâce au texte du deuxième élément ayant la classe "media__body__cat"
                 #print("media__body__cat")
                 #category = driver.find_elements(By.CLASS_NAME, "media__body__cat")[1].text###
-                categories_scraped = self.driver.find_elements(By.CLASS_NAME, "c-article-tags__item")
+                categories_scraped = body.find_elements(By.CLASS_NAME, "c-article-tags__item")
                 categories = []
                 for tag in categories_scraped:
                     tagText = tag.text
@@ -117,10 +179,17 @@ class NewsScraper:
                     categories.append(tagText)
                 category = ", ".join(categories)
 
+                """
+                ^v1
+                """
 
+                """
+                Get article paragraphs
+                """
                 #Récupération des paragraphes
                 #print("//*[@class=c-article-content]//*")
-                paragraphs_scraped = self.driver.find_elements(By.XPATH, "//*[starts-with(@class,'c-article-content')]//*") #Etape 1) On récupère tous les paragraphes de l'article grâce au X-path###
+
+                paragraphs_scraped = body.find_elements(By.XPATH, "//*[starts-with(@class,'c-article-content')]//*") #Etape 1) On récupère tous les paragraphes de l'article grâce au X-path###
                 #self.driver.find_elements(By.XPATH, "//*[@class='c-article-content js-article-content ']//*")
 
                 #Etape 2) On récupère le texte de chaque paragraphe
@@ -141,12 +210,23 @@ class NewsScraper:
                         #print("Debug-Skipped: Unplanned HTML tag")
                     #print()
 
-                print(f"paragraphs({len(paragraphs)}): {paragraphs}")
+                #print(f"paragraphs({len(paragraphs)}): {paragraphs}")
                 text  = "\n".join(paragraphs) #Etape 3) On joint les paragraphes en un texte
 
+                """
+                ^v1
+                """
+
+                """
+                Build dictionnary
+                """
                 #On crée un dictionnaire avec les différents éléments récupérés
                 dictionnary_of_article = {"date": date, "title": title, "authors": authors, "category": category, "text": text, "link": article }
                 logDal.debug(f"dictionnary_of_article:\n{dictionnary_of_article}")
+
+                """
+                If missing field -> Save page source in a failure file
+                """
                 if not date or not title or not authors or not category or not text:
                     logDal.debug(f"Article is missing fields value- Aborting...\n{article}")
                     articlesWithEmptyFieldsCount +=1
@@ -156,18 +236,24 @@ class NewsScraper:
                         f.write(self.driver.page_source)
                 else:
                     pass
+
+                
+                """
+                Add scraped article data in the database
+                Wait before scraping next article not to get flagged as bot and get our IP banned
+                """
                 list_of_articles.append(dictionnary_of_article) 
                 logDal.debug(f"before postOne call")
                 self.dalArticle.postOne(dictionnary_of_article)
                 logDal.debug(f"after postOne call")
-                time.sleep(0.5)#Ajout de 3 secondes avant de charger la page de l'article suivant
+                time.sleep(3)#Ajout de 3 secondes avant de charger la page de l'article suivant
 
             except Exception as e: #
                 errors.append({article: e}) #On ajoute dans une liste tous les articles dont n'où n'avons pas pu scrapper le contenu
         self.errors = errors
         self.scrapedArticles = list_of_articles
-        print(list_of_articles)
-        print(len(list_of_articles))
+        #print(list_of_articles)
+        #print(len(list_of_articles))
         return list_of_articles
     
     class DataAccessLayer:
